@@ -2,13 +2,6 @@ import Vue from 'vue'
 import App from './App.vue'
 import BrHeader from './components/BrHeader.vue'
 import router from './router' // 新增：引入 router
-// 在 main.js 中 router 创建后加入（临时）
-document.addEventListener('click', (e) => {
-    const a = e.target.closest && e.target.closest('a');
-    if (a) {
-        console.log('[link click] hrefAttr=', a.getAttribute('href'), 'href=', a.href, 'target=', a.target);
-    }
-});
 
 // Bootstrap + BootstrapVue CSS
 import 'bootstrap/dist/css/bootstrap.css'
