@@ -161,6 +161,7 @@ export default {
     }
   },
 
+  // keep parity with backend
   MAX_CHARS: 8000,
 
   mounted() {
@@ -194,13 +195,12 @@ export default {
   },
 
   methods: {
-    /* -------------------
-       NEW: robust URL builder
-       -------------------
-       - Uses VUE_APP_API_BASE if set (should be your worker domain, WITHOUT trailing /api)
-       - If VUE_APP_API_BASE is empty, falls back to relative paths (same-domain)
-       - Avoids duplicate /api/api when base already contains /api
-    */
+    onTextInput() {
+      this.words = this.text.trim().length ? this.text.split(/\s+/) : [];
+      this.currentWordIndex = -1;
+    },
+
+    // Robust URL builder: use VUE_APP_API_BASE (no trailing /api) and avoid duplicate /api prefix
     buildApiUrl(path) {
       const baseEnv = (process.env.VUE_APP_API_BASE || '').trim();
       const base = baseEnv.replace(/\/+$/, '');
@@ -213,27 +213,7 @@ export default {
       return base + p;
     },
 
-    // dataUri helper (kept from before)
-    dataUriToBlob(dataUri) {
-      const m = dataUri.match(/^data:([^;]+);base64,(.*)$/s);
-      if (!m) return null;
-      const mime = m[1];
-      const b64 = m[2];
-      const bin = atob(b64);
-      const len = bin.length;
-      const u8 = new Uint8Array(len);
-      for (let i = 0; i < len; i++) u8[i] = bin.charCodeAt(i);
-      return new Blob([u8], { type: mime });
-    },
-
-    onTextInput() {
-      this.words = this.text.trim().length ? this.text.split(/\s+/) : [];
-      this.currentWordIndex = -1;
-    },
-
-    /* -------------------
-       Main: request TTS
-       ------------------- */
+    // main entry: request TTS (POST to /api/talk)
     async requestTts() {
       if (!this.canRequest || this.isLoading) return;
       this.isLoading = true;
@@ -248,8 +228,8 @@ export default {
       else { payload.url = this.url; payload.selector = this.selector; }
       payload.format = "mp3";
 
-      // Build endpoint robustly (will point to worker if VUE_APP_API_BASE is set)
-      const endpoint = this.buildApiUrl('/talk');
+      // IMPORTANT: call the worker's /api/talk endpoint (worker expects /api/* in this deploy)
+      const endpoint = this.buildApiUrl('/api/talk');
       console.log('[MakeBrowserTalk] POST endpoint:', endpoint);
 
       try {
@@ -260,14 +240,8 @@ export default {
           signal: this.ttsAbortController.signal,
         });
 
-        // 405 often indicates method not allowed (server didn't accept POST) or preflight rejected.
-        if (resp.status === 405) {
-          const txt = await resp.text().catch(() => '');
-          throw new Error(`Server returned 405 (Method Not Allowed). Response body: ${txt || '<no body>'}. This often means the request reached a static Pages endpoint or the backend did not handle POST/OPTIONS. Check that /talk is routed to your Worker and that the Worker handles OPTIONS (CORS preflight).`);
-        }
-
         if (!resp.ok) {
-          const txt = await resp.text().catch(() => '');
+          const txt = await resp.text().catch(() => "");
           throw new Error(`Server ${resp.status}: ${txt}`);
         }
 
@@ -295,7 +269,6 @@ export default {
       }
     },
 
-    // rest of helpers kept mostly same as your original implementation
     tryParseAndExtract(raw) {
       try {
         if (!raw) return "";
@@ -356,9 +329,10 @@ export default {
         .trim();
     },
 
-    // play audio: now uses buildApiUrl to fetch audio if audio is served by worker
+    // play audio by R2 key - fetch blob -> createObjectURL
     async playKey(key) {
-      const audioEndpoint = this.buildApiUrl(`/audio/${encodeURIComponent(key)}`);
+      // IMPORTANT: audio endpoint uses /api/audio/:key
+      const audioEndpoint = this.buildApiUrl(`/api/audio/${encodeURIComponent(key)}`);
       console.log('[MakeBrowserTalk] GET audio endpoint:', audioEndpoint);
 
       try {
@@ -495,5 +469,5 @@ export default {
 </script>
 
 <style scoped>
-/* (样式保持不变，省略以节省空间 —— 你已有的样式可以继续使用) */
+/* 省略样式：保持与你现有样式一致（你已有完整样式，可保留） */
 </style>
