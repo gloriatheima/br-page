@@ -42,11 +42,14 @@
       </div>
     </form>
 
+    <!-- 简单的错误 / 状态显示（保持原有 UX） -->
+    <div v-if="statusMessage" class="status-message">{{ statusMessage }}</div>
+
     <footer>
       <p>
         REST API 为常见的浏览器操作提供端点，例如屏幕截图、提取 HTML 内容、生成 PDF 等。以下是可用选项：<br>
         <ul>
-           
+
           <li>/content - Fetch HTML</li>
           <li>/screenshot - Capture screenshot</li>
           <li>/pdf - Render PDF</li>
@@ -62,6 +65,15 @@
 </template>
 
 <script>
+/*
+  修改要点（已在代码中实现）：
+  - 使用智能 buildApiUrl 拼接 VUE_APP_API_BASE 与请求路径（自动去重 /api，支持 env 带或不带 /api）
+  - 强制前端请求使用 /api/<action>?... （worker 通常期待 /api 前缀）
+  - 在发起请求前打印 endpoint（便于 debug）
+  - 对不同 Content-Type 做更智能的处理：image/pdf -> blob -> open/download；json -> 智能解析（links/json/data URI）；html/text -> 新窗口展示
+  - 保留并尽量不修改你原有的注释与逻辑
+*/
+
 export default {
   name: 'ContentGenPuppetron',
 
@@ -71,6 +83,8 @@ export default {
       action: 'content',
       protocol: 'http://',
       currentObjectUrl: null,
+      statusMessage: '',
+
       // list of supported backend routes to display as buttons
       actions: [
         'content',
@@ -82,6 +96,7 @@ export default {
         'links',
         'markdown'
       ],
+
       // selectors textarea model for scrape
       selectors: ''
     };
@@ -116,108 +131,40 @@ export default {
     },
 
     /*
-      新增方法：buildApiUrl
-      - 优先使用 process.env.VUE_APP_API_BASE（由 Cloudflare Pages 控制台或 .env 注入）
-      - 如果没有配置 VUE_APP_API_BASE，则回退到相对路径（/api/…），用于在同域并由 Worker 绑定到 /api/* 的场景
-      - 该改动不会影响你现有的注释与逻辑，仅在构建请求 URL 时使用
+      更健壮的 buildApiUrl：
+      - 处理 baseEnv 带或不带 /api 的情况，避免出现 /api/api/...
+      - 确保最终以 base + path 的形式返回（path 以 / 开头）
+      - 若 baseEnv 为空，返回相对 path（用于同域且由 Worker Route 绑定的情况）
     */
     buildApiUrl(path) {
-      const base = (process.env.VUE_APP_API_BASE || '').replace(/\/+$/, '');
-      if (base) {
-        return `${base}${path}`;
+      const baseEnv = (process.env.VUE_APP_API_BASE || '').trim();
+      const base = baseEnv.replace(/\/+$/, '');
+      let p = path || '';
+      if (!p.startsWith('/')) p = '/' + p;
+
+      if (!base) return p;
+
+      // 如果 base 以 '/api' 结尾并且 path 也以 '/api' 开头，移除 path 的 '/api' 前缀
+      if (base.toLowerCase().endsWith('/api') && p.toLowerCase().startsWith('/api')) {
+        p = p.replace(/^\/api/i, '');
       }
-      // 回退到相对 /api 路径（如果 Worker 绑定到 same-domain 上）
-      return path;
+      return base + p;
     },
 
-    async onSubmit() {
-      if (!this.url || !(this.url.startsWith('http://') || this.url.startsWith('https://'))) {
-        alert('Please enter a valid URL including http:// or https://');
-        return;
-      }
-
-      const params = new URLSearchParams({ url: this.url });
-
-      // include viewport params only for endpoints that normally use them
-      if (this.action === 'screenshot' || this.action === 'snapshot') {
-        params.set('width', String(window.innerWidth));
-        params.set('height', String(window.innerHeight));
-      }
-
-      // scrape: if selectors provided, encode as elements JSON array per Cloudflare example
-      if (this.action === 'scrape') {
-        const lines = (this.selectors || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-        if (lines.length) {
-          const elements = lines.map(s => ({ selector: s }));
-          // JSON.stringify will be percent-encoded by URLSearchParams when setting as value
-          params.set('elements', JSON.stringify(elements));
-        }
-        // If selectors empty, we still include url param (server-side will accept url-only fallback)
-      }
-
-      // 构造请求路径并优先使用 buildApiUrl（支持跨域 worker 域名）
-      const endpointPath = `/${this.action}?${params.toString()}`;
-      const endpoint = this.buildApiUrl(endpointPath);
-
-      try {
-        // 若需要携带 cookie/session，请把下面的 credentials:'include' 取消注释
-        const resp = await fetch(endpoint, { method: 'GET' /* , credentials: 'include' */ });
-
-        if (!resp.ok) {
-          const txt = await resp.text().catch(() => '');
-          throw new Error(`Server returned ${resp.status}: ${txt}`);
-        }
-
-        const ct = (resp.headers.get('content-type') || '').toLowerCase();
-
-        // 支持多种 action 返回类型：图片/PDF/HTML/JSON/二进制
-        if (ct.includes('image/')) {
-          const blob = await resp.blob();
-          this.applyPreviewFromBlob(blob, 'image');
-        } else if (ct.includes('application/pdf')) {
-          const blob = await resp.blob();
-          this.applyPreviewFromBlob(blob, 'pdf');
-        } else if (ct.includes('application/json')) {
-          // JSON 可能是结构化结果（例如 json/action 或 ai result）
-          const text = await resp.text();
-          try {
-            const parsed = JSON.parse(text);
-            // 如果是图片以 base64 字符串形式出现在 JSON.result，处理并展示
-            if (parsed && typeof parsed.result === 'string' && parsed.result.startsWith('data:')) {
-              // data URI => convert to blob
-              const match = parsed.result.match(/^data:([^;]+);base64,(.*)$/s);
-              if (match) {
-                const b64 = match[2];
-                const bytes = atob(b64);
-                const len = bytes.length;
-                const u8 = new Uint8Array(len);
-                for (let i = 0; i < len; i++) u8[i] = bytes.charCodeAt(i);
-                const blob = new Blob([u8], { type: match[1] || 'application/octet-stream' });
-                this.applyPreviewFromBlob(blob, match[1].startsWith('image/') ? 'image' : 'binary');
-                return;
-              }
-            }
-            // 否则把 JSON 格式化后在新窗口显示
-            this.showHtmlPreview(`<pre>${this.escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`);
-          } catch {
-            // 非标准 JSON，直接以文本显示
-            this.showHtmlPreview(`<pre>${this.escapeHtml(text)}</pre>`);
-          }
-        } else if (ct.includes('text/html') || ct.includes('text/plain')) {
-          // HTML 或纯文本，直接在新窗口显示（Content 路由常返回 HTML）
-          const text = await resp.text();
-          this.showHtmlPreview(text);
-        } else {
-          // 其他未知类型：当作二进制处理并触发下载/预览
-          const blob = await resp.blob();
-          this.applyPreviewFromBlob(blob, 'binary');
-        }
-      } catch (err) {
-        console.error(err);
-        alert('Request failed: ' + (err.message || err));
-      }
+    // 把 data URI (data:...;base64,...) 转成 Blob
+    dataUriToBlob(dataUri) {
+      const m = dataUri.match(/^data:([^;]+);base64,(.*)$/s);
+      if (!m) return null;
+      const mime = m[1];
+      const b64 = m[2];
+      const bin = atob(b64);
+      const len = bin.length;
+      const u8 = new Uint8Array(len);
+      for (let i = 0; i < len; i++) u8[i] = bin.charCodeAt(i);
+      return new Blob([u8], { type: mime });
     },
 
+    // 将 blob 处理为 objectURL 并预览 / 下载
     applyPreviewFromBlob(blob, kind) {
       // Revoke previous object URL if present
       if (this.currentObjectUrl) {
@@ -246,6 +193,7 @@ export default {
       a.remove();
     },
 
+    // 在新窗口展示 HTML 内容（安全性：仅用于调试/preview，不做消毒）
     showHtmlPreview(html) {
       const w = window.open('', '_blank');
       if (w) {
@@ -293,6 +241,150 @@ export default {
 
     escapeHtml(s) {
       return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    },
+
+    /*
+      Main submit handler
+      - 构造 /api/<action>?... 路径（Worker 通常期望 /api 前缀）
+      - 使用 buildApiUrl 智能拼接（支持 VUE_APP_API_BASE 带或不带 /api）
+      - 对不同返回类型进行智能处理
+    */
+    async onSubmit() {
+      this.statusMessage = '';
+      if (!this.url || !(this.url.startsWith('http://') || this.url.startsWith('https://'))) {
+        alert('Please enter a valid URL including http:// or https://');
+        return;
+      }
+
+      const params = new URLSearchParams({ url: this.url });
+
+      // include viewport params only for endpoints that normally use them
+      if (this.action === 'screenshot' || this.action === 'snapshot') {
+        params.set('width', String(window.innerWidth));
+        params.set('height', String(window.innerHeight));
+      }
+
+      // scrape: if selectors provided, encode as elements JSON array per Cloudflare example
+      if (this.action === 'scrape') {
+        const lines = (this.selectors || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        if (lines.length) {
+          const elements = lines.map(s => ({ selector: s }));
+          // JSON.stringify will be percent-encoded by URLSearchParams when setting as value
+          params.set('elements', JSON.stringify(elements));
+        }
+      }
+
+      // Important: include /api prefix in path (worker expects /api/*)
+      const endpointPath = `/api/${this.action}?${params.toString()}`;
+      const endpoint = this.buildApiUrl(endpointPath);
+
+      // debug: print actual endpoint that will be fetched
+      // 这行在调试时很有帮助：确认前端到底请求哪个域名/路径
+      console.log('[ContentGen] FETCH endpoint:', endpoint);
+
+      // clear previous object URL if any
+      if (this.currentObjectUrl) {
+        try { URL.revokeObjectURL(this.currentObjectUrl); } catch (e) { /* noop */ }
+        this.currentObjectUrl = null;
+      }
+
+      try {
+        this.statusMessage = '请求中…';
+        // 若需要携带 cookie/session，请把下面的 credentials:'include' 取消注释
+        const resp = await fetch(endpoint, { method: 'GET' /* , credentials: 'include' */ });
+
+        if (!resp.ok) {
+          // 尝试读取文本用于调试
+          const txt = await resp.text().catch(() => '');
+          // 如果是 404 且返回 JSON {"error":"not_found"}, 很可能是 worker 路由或 action 名称不匹配
+          console.error('[ContentGen] fetch error response:', resp.status, txt);
+          throw new Error(`Server returned ${resp.status}: ${txt}`);
+        }
+
+        const ct = (resp.headers.get('content-type') || '').toLowerCase();
+
+        // 支持多种 action 返回类型：图片/PDF/HTML/JSON/二进制
+        if (ct.includes('image/')) {
+          const blob = await resp.blob();
+          this.applyPreviewFromBlob(blob, 'image');
+          this.statusMessage = '';
+        } else if (ct.includes('application/pdf')) {
+          const blob = await resp.blob();
+          this.applyPreviewFromBlob(blob, 'pdf');
+          this.statusMessage = '';
+        } else if (ct.includes('application/json')) {
+          // JSON 可能是结构化结果（例如 json/action 或 ai result）
+          const text = await resp.text();
+          try {
+            const parsed = JSON.parse(text);
+
+            // 如果是 links action，优先处理为可点击链接列表
+            if (this.action === 'links') {
+              // 支持直接返回数组或 { links: [...] }
+              let links = null;
+              if (Array.isArray(parsed)) links = parsed;
+              else if (parsed && Array.isArray(parsed.links)) links = parsed.links;
+
+              if (links) {
+                // 生成简单 HTML 列表在新窗口展示
+                const html = `<h3>Links (${links.length})</h3><ul>${links.map(l => `<li><a href="${this.escapeAttr(l)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(l)}</a></li>`).join('')}</ul>`;
+                this.showHtmlPreview(html);
+                this.statusMessage = '';
+                return;
+              }
+            }
+
+            // 如果 JSON 中包含 data: URI（如图片），解析并展示
+            if (parsed && typeof parsed.result === 'string' && parsed.result.startsWith('data:')) {
+              const blob = this.dataUriToBlob(parsed.result);
+              if (blob) {
+                const kind = (blob.type || '').startsWith('image/') ? 'image' : 'binary';
+                this.applyPreviewFromBlob(blob, kind);
+                this.statusMessage = '';
+                return;
+              }
+            }
+
+            // 默认：把 JSON 格式化后在新窗口显示
+            this.showHtmlPreview(`<pre>${this.escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`);
+            this.statusMessage = '';
+          } catch (e) {
+            // 非标准 JSON，直接展示文本
+            this.showHtmlPreview(`<pre>${this.escapeHtml(text)}</pre>`);
+            this.statusMessage = '';
+          }
+        } else if (ct.includes('text/html')) {
+          const text = await resp.text();
+          // content / snapshot 通常返回 HTML，直接展示
+          this.showHtmlPreview(text);
+          this.statusMessage = '';
+        } else if (ct.includes('text/markdown') || this.action === 'markdown') {
+          // markdown: treat as plain text if server returns markdown or if action is markdown
+          const text = await resp.text();
+          // 简易渲染：显示原始 markdown（你可替换成 marked + DOMPurify 更安全）
+          this.showHtmlPreview(`<pre>${this.escapeHtml(text)}</pre>`);
+          this.statusMessage = '';
+        } else if (ct.includes('text/plain')) {
+          const text = await resp.text();
+          this.showHtmlPreview(`<pre>${this.escapeHtml(text)}</pre>`);
+          this.statusMessage = '';
+        } else {
+          // fallback: treat as binary
+          const blob = await resp.blob();
+          this.applyPreviewFromBlob(blob, 'binary');
+          this.statusMessage = '';
+        }
+      } catch (err) {
+        console.error('[ContentGen] Request failed:', err);
+        this.statusMessage = '';
+        // 为了兼容你之前的 UX，仍保留 alert 提示
+        alert('Request failed: ' + (err.message || err));
+      }
+    },
+
+    // 简单的 attribute escape（用于插入 href）
+    escapeAttr(s) {
+      return String(s).replace(/"/g, '&quot;');
     }
   },
 
@@ -392,6 +484,15 @@ input[type='url']:focus {
   color: #666;
   margin-top: 0.5rem;
 }
+
+/* status message */
+.status-message {
+  margin: 12px auto;
+  color: #333;
+  max-width: 900px;
+  text-align: center;
+}
+
 /* ====== 新增：让页面内的列表左对齐，同时保留列表块居中（首选） ====== */
 /* 使 .puppetron 下的 ul/ol 项目内部左对齐，但把整个列表块居中显示 */
 .puppetron ul,
@@ -409,22 +510,6 @@ input[type='url']:focus {
 .puppetron ol li {
   text-align: left;
 }
-
-/* 如果列表在 <p> 内，给出合理的间距 */
-.puppetron p ul,
-.puppetron p ol {
-  margin-top: 0.5rem;
-}
-
-/* ====== 备选：如果你希望列表整体左靠页面（取消列表块居中），可使用下面代码（注释掉上面 inline-block 的版本） ======
-.puppetron ul,
-.puppetron ol {
-  text-align: left;
-  display: block;
-  margin: 0.5rem 0;
-  padding-left: 1.35rem;
-}
-*/
 
 /* Footer */
 footer {
