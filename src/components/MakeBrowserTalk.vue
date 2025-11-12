@@ -89,11 +89,64 @@
           </span>
         </div>
       </div>
+
+      <!-- START: Collapsible card for logic diagram -->
+      <div id="accordionExample" aria-multiselectable="false" style="width:90%; max-width:900px; margin-top:1rem;">
+        <b-card no-body class="mb-2">
+          <b-card-header
+            header-tag="header"
+            class="p-0"
+            role="tab"
+            id="headingDiagram"
+          >
+            <h2 class="mb-0">
+              <b-button
+                v-b-toggle.collapseDiagram
+                variant="link"
+                block
+                class="text-left"
+              >
+                MakeBrowserTalk 实现逻辑图
+              </b-button>
+            </h2>
+          </b-card-header>
+
+          <b-collapse
+            id="collapseDiagram"
+            accordion="accordionExample"
+            class="border-top"
+            role="tabpanel"
+            aria-labelledby="headingDiagram"
+            v-model="collapseDiagramOpen"
+          >
+            <b-card-body>
+              <!-- 简短说明 -->
+              <p class="muted" style="margin-bottom:0.5rem">
+                Pages/UI 输入 → Worker (BR/TTS) → R2 存储 → UI 播放
+              </p>
+
+              <!-- 在这里插入图片：图片使用 data 中的 diagramUrl（懒加载） -->
+              <div class="diagram-wrapper mt-3" v-if="collapseDiagramOpen">
+                <div v-if="diagramUrl">
+                  <img
+                    :src="diagramUrl"
+                    :alt="imageAlt"
+                    class="img-fluid diagram-img"
+                  />
+                </div>
+                <div v-else class="muted" style="font-size:13px; color:#567;">Loading diagram...</div>
+              </div>
+            </b-card-body>
+          </b-collapse>
+        </b-card>
+      </div>
+      <!-- END: Collapsible card for logic diagram -->
+
     </form>
 
     <footer>
       <p>
-        Make your browser talk via server TTS (BR → Workers AI → R2). Theme matches ContentGen.
+        Make your browser talk via Models (TTS)
       </p>
     </footer>
   </div>
@@ -124,8 +177,11 @@ export default {
       ttsAbortController: null,
       rawBrJson: null,
       showRawBrJson: false,
-      imageUrl: null,
-      imageAlt: 'Browser Rendering integration diagram',
+      // image/diagram related
+      diagramUrl: null,
+      imageAlt: 'MakeBrowserTalk 流程图',
+      collapseDiagramOpen: false,
+      // existing collapse toggle kept for other UI (if needed)
       collapseThreeOpen: false,
     };
   },
@@ -178,6 +234,21 @@ export default {
   },
 
   watch: {
+    // lazy-load diagram image only when user opens the collapse
+    collapseDiagramOpen(newVal) {
+      if (newVal && !this.diagramUrl) {
+        try {
+          // require the diagram asset lazily to avoid bundling cost on initial load.
+          // replace the path with your actual asset path; fallback to null on failure.
+          this.diagramUrl = require('@/assets/talk-worker.drawio.png');
+        } catch (e) {
+          console.debug('lazy load diagram failed', e);
+          this.diagramUrl = null;
+        }
+      }
+    },
+
+    // keep existing watcher in case you use other collapses
     collapseThreeOpen(newVal) {
       if (newVal && !this.imageUrl) {
         try {
@@ -649,6 +720,21 @@ h1 {
   font-size: 12px;
 }
 
+/* diagram styles (new) */
+.diagram-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 0.6rem;
+}
+.diagram-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 4px 18px rgba(6,75,82,0.06);
+  border: 1px solid rgba(6,75,82,0.04);
+}
+
 /* status / errors */
 .status-message { margin: 12px auto; max-width: 900px; text-align: center; }
 .status-message.error { color: #b00020; }
@@ -662,5 +748,6 @@ h1 {
   .action-buttons { flex-direction: column; align-items: stretch; }
   .btn { min-width: auto; width: 100%; }
   .raw-json-pre { font-size: 12px; }
+  .diagram-img { max-width: 100%; height: auto; }
 }
 </style>
