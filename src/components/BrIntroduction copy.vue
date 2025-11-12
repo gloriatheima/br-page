@@ -216,6 +216,9 @@
             <p>2. <strong style="color: skyblue">默认全球部署</strong>：浏览器会话运行在 Cloudflare 的边缘网络上，靠近终端用户，从而提升速度和全球可用性。</p>
             <p>3. <strong style="color: skyblue">易于集成</strong>：提供用于常用操作的 REST API，同时还提供 <strong>Puppeteer</strong> 和 <strong>Playwright </strong>等常用自动化library，方便处理复杂的工作流程。</p>
             <p>4. <strong style="color: skyblue">会话管理</strong>：在请求之间复用浏览器会话，提升性能并降低冷启动消耗。</p>
+
+
+
           </b-card-body>
         </b-collapse>
       </b-card>
@@ -254,12 +257,14 @@
               <a href="#" class="list-group-item list-group-item-action ">
                 <div class="d-flex w-100 justify-content-between">
                   <h5 class="mb-1" style="color: skyblue">1.自动从网站提取结构化数据</h5>
+                  <!-- <small>3 days ago</small> -->
                 </div>
                 <p class="mb-1">
                   我的使用场景是需要从电商店铺页面提取结构化数据（JSON格式），例如标题、描述、图片URL、价格等。<br>
                   以前，手动从eBay抓取价格需要3-4天时间。现在我们使用 BR 实现了自动化。<br>
                   我们在企业入驻过程中进行数据丰富，需要抓取大量数据。<br>
                 </p>
+                <!-- <small>And some small print.</small> -->
               </a>
               <a href="#" class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
@@ -269,6 +274,7 @@
                 <p class="mb-1">我们用它来让用户生成并下载PDF格式的许可证和收据。<br>
                 我们使用Puppeteer生成各种格式的网络研讨会证书。<br>
                 </p>
+                <!-- 在这里插入图片：图片使用 data 中的 imageUrl -->
             <div class="diagram-wrapper mt-3">
               <img
                 :src="require('@/assets/contentgen.drawio.png')"
@@ -281,6 +287,7 @@
               <a href="#" class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
                   <h5 class="mb-1" style="color: skyblue">3.创建网站缩略图和社交预览</h5>
+                  <small class="text-muted"></small>
                 </div>
                 <p class="mb-1">我们正在使用 API 为社区创建的网站生成截图预览。<br>
                 我们的仪表板展示了客户创建的网页内容……我们需要为他们所做的更改生成缩略图。<br>
@@ -291,6 +298,7 @@
               <a href="#" class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
                   <h5 class="mb-1" style="color: skyblue">4.监控和扫描 Web 内容</h5>
+                  <small class="text-muted"></small>
                 </div>
                 <p class="mb-1">CF Radar 的  <a href="https://radar.cloudflare.com/scan" target="_blank" rel="noopener noreferrer">URL 扫描器</a>使用 BR 来加载和呈现网页，以捕获 DOM 快照、网络日志（HAR）及不同设备尺寸下的屏幕截图，用于网站分析。<br>
                 CF 为每期新发布的时事通讯截取一张屏幕截图/生成一份 PDF，并将其保存在 R2 中。<br>
@@ -302,6 +310,7 @@
               <a href="#" class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
                   <h5 class="mb-1" style="color: skyblue">5.在 Web 上赋能 AI Agent </h5>
+                  <small class="text-muted"></small>
                 </div>
                 <p class="mb-1">我们正在构建一个模型，以帮助用户完成任务——比如办理航班登机手续。<br>
                 我们使用 BR 从静态网站获取数据用于检索增强型生成（RAG）。<br>
@@ -350,7 +359,7 @@
         </b-collapse>
       </b-card>
 
-      <!-- 第八个卡片：把 BR vs Pages 对比表放在这里 -->
+      <!-- 新增卡片 8 -->
       <b-card no-body class="mb-2">
         <b-card-header
           header-tag="header"
@@ -365,7 +374,7 @@
               block
               class="text-left"
             >
-              BR vs Pages
+              常见问题（FAQ）
             </b-button>
           </h2>
         </b-card-header>
@@ -378,37 +387,7 @@
           aria-labelledby="headingEight"
         >
           <b-card-body>
-            <!-- 插入 BR vs Pages 对比表 -->
-            <div class="compare-table mt-1">
-              <!-- 表头 -->
-              <div class="table-row header-row">
-                <div class="col col-feature">维度</div>
-                <div class="col col-pages text-center">Cloudflare Pages（静态 / SSR）</div>
-                <div class="col col-br text-center">Browser Rendering（DO 动态 "Pages"）</div>
-              </div>
-
-              <!-- 数据行 -->
-              <div
-                v-for="(row, idx) in comparisonRows"
-                :key="idx"
-                class="table-row"
-                :class="{ 'last-row': idx === comparisonRows.length - 1 }"
-              >
-                <div class="col col-feature">
-                  <div class="feature-text">{{ row.dimension }}</div>
-                </div>
-                <div class="col col-pages text-left">
-                  <div class="cell-text" v-html="row.pages"></div>
-                </div>
-                <div class="col col-br text-left">
-                  <div class="cell-text" v-html="row.browser"></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="hint mt-3">
-              建议: 先使用 Pages/SSR 输出基础 HTML；仅在用户/任务需要时再触发 Browser Rendering（可节省成本）。
-            </div>
+            放置一些常见问题与解答，例如“如何开始？”，“如何调试？”，“有没有示例仓库？”等。
           </b-card-body>
         </b-collapse>
       </b-card>
@@ -442,76 +421,6 @@ export default {
           feature: "Total requests per min (REST API only)",
           free: "6 per minute",
           paid: "180 per minute",
-        },
-      ],
-
-      // 新增：BR vs Pages 的对比数据（放在第八个卡片）
-      comparisonRows: [
-        {
-          dimension: "目标场景",
-          pages:
-            "静态站点、或后端 SSR 已输出完整 HTML（例如博客、文档、营销页）",
-          browser:
-            "SPA 或依赖大量客户端 JS 的页面、需要运行 JS 才能得到最终 DOM 或截图（例如仪表盘、动态渲染的电商页）",
-        },
-        {
-          dimension: "渲染模型",
-          pages:
-            "直接返回静态 HTML 或客户端渲染无需在服务器端执行页面 JS",
-          browser:
-            "在 headless 浏览器中执行页面 JS（Puppeteer / Playwright），获取渲染后的 DOM 与截图",
-        },
-        {
-          dimension: "运行环境",
-          pages:
-            "Cloudflare Pages / Workers（边缘） — 无需维持长期进程",
-          browser:
-            "Durable Object (作为浏览器管理器) + PuppeteerWorkers（或 CF 的 puppeteer 集成）",
-        },
-        {
-          dimension: "有无状态",
-          pages:
-            "无状态或短期 request-scoped（可用 Workers KV / R2 做持久化）",
-          browser:
-            "有状态（DO 可持久化 task queue、缓存、管理浏览器生命周期）",
-        },
-        {
-          dimension: "延迟与启动时间",
-          pages: "响应快，CDN 缓存命中时几乎无延迟",
-          browser:
-            "相对较高：包含浏览器启动、newPage、等待网络空闲等步骤（秒级）",
-        },
-        {
-          dimension: "资源消耗",
-          pages: "低：仅负责传输与少量边缘计算",
-          browser: "高：浏览器占用内存/CPU，尤其是并发时",
-        },
-        {
-          dimension: "可扩展性",
-          pages:
-            "自动水平扩展，适合高并发请求（由 Pages/Workers/CDN 处理）",
-          browser:
-            "需限流与队列（DO 可管理并发），水平扩展更复杂且需控制成本",
-        },
-        {
-          dimension: "缓存策略",
-          pages:
-            "构建时或边缘可长期缓存（TTL），非常节省成本和带宽",
-          browser:
-            "把渲染结果缓存到 R2 或 Workers Cache，并设置合理 TTL，避免重复渲染",
-        },
-        {
-          dimension: "安全性",
-          pages: "常规边缘安全（WAF、CDN）即可",
-          browser:
-            "需限制内网访问、在 page 上拦截并阻止不必要的第三方资源",
-        },
-        {
-          dimension: "推荐使用场景",
-          pages:
-            "博客、文档、静态产品页、SEO 友好的页面优先使用 Pages/SSR",
-          browser:
-            "需要执行页面 JS 才能获取内容、截图、PDF、复杂自动化流程时使用 Browser Rendering",
         },
       ],
     };
@@ -597,9 +506,8 @@ export default {
   font-size: 15px;
   color: #063a3b;
 }
-/* 不同表格列的宽度 */
 .col-feature { flex: 2 1 45%; text-align: left; }
-.col-free, .col-paid, .col-pages, .col-br { flex: 1 1 27%; text-align: center; }
+.col-free, .col-paid { flex: 1 1 27%; text-align: center; }
 
 /* 文本样式 */
 .feature-text {
@@ -640,18 +548,10 @@ export default {
 }
 .br-intro .list-group .list-group-item p { margin:0.4rem 0 0; color:#333; }
 
-/* FAQ & hint */
-.faq ul { padding-left: 1rem; margin: 0.5rem 0; color: #063a3b; }
-.hint {
-  color: #375b58;
-  font-size: 14px;
-  margin-top: 12px;
-}
-
 /* 小屏响应式：保持行为不变，仅调整文字大小 */
 @media (max-width: 767.98px) {
   .table-row { flex-direction: column; align-items: stretch; padding: 10px 6px; }
-  .col-feature, .col-free, .col-paid, .col-pages, .col-br { flex: none; width: 100%; padding: 8px 6px; }
+  .col-feature, .col-free, .col-paid { flex: none; width: 100%; padding: 8px 6px; }
   .col-feature, .col-free { border-bottom: 1px solid rgba(6,75,82,0.06); }
 }
 
