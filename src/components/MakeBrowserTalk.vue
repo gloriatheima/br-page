@@ -538,6 +538,8 @@ export default {
 <style scoped>
 @import url('https://fonts.googleapis.com/css?family=Signika:400,700');
 
+
+
 .puppetron {
   margin: auto;
   width: 100%;

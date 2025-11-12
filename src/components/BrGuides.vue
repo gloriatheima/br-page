@@ -33,7 +33,7 @@ export default {
         { to: '/br-introduction', title: 'BR Introduction' },
         { to: '/content-generation', title: 'BR REST API Demo' },
         { to: '/make-browser-talk', title: 'Make your browser talk' },
-        // { to: '/seo-analytic', title: 'SEO analytic' }
+        { to: '/br-and-pages', title: 'BR and Pages' }
       ]
     }
   }
