@@ -1,402 +1,176 @@
 <template>
-  <div class="puppetron container py-4">
-    <h1>BR REST API</h1>
+  <div class="screenshot-viewer">
+    <!-- 输入目标 URL 并触发截图请求 -->
+    <div class="controls">
+      <label>目标 URL：</label>
+      <input v-model="targetUrl" placeholder="http://example.com/page" class="url-input" />
+      <button @click="onFetch" :disabled="loading">获取截图</button>
+      <button v-if="screenshotSrc" @click="download" :disabled="loading">下载图片</button>
+    </div>
 
-    <form ref="formtron" id="formtron" @submit.prevent="onSubmit">
-      <input
-        type="url"
-        name="url"
-        v-model="url"
-        required
-        placeholder="Enter a URL"
-        @paste="onPaste"
-        @focus="onFocus"
-        @blur="onBlur"
-      />
-      <br />
+    <!-- 状态与错误 -->
+    <div v-if="loading" class="status">正在加载…</div>
+    <div v-if="error" class="error">错误：{{ error }}</div>
 
-      <!-- Buttons for all supported backend actions -->
-      <div class="actions-grid">
-        <button
-          v-for="act in actions"
-          :key="act"
-          type="submit"
-          :name="act"
-          @click="setAction(act)"
-          :class="{ active: action === act }"
-        >
-          {{ labelFor(act) }}
-        </button>
-      </div>
-
-      <!-- Scrape selectors textarea (only visible when scrape is selected) -->
-      <div v-if="action === 'scrape'" class="scrape-controls">
-        <label for="selectors"><strong>Scrape 标签选择器 (每行一个)</strong></label>
-        <textarea
-          id="selectors"
-          v-model="selectors"
-          placeholder="输入 CSS 选择器, 每行一个. 如:h1 ｜ a ｜ div | .article | .title 等"
-          rows="6"
-        ></textarea>
-        <p class="hint">如果留空，则只会使用 URL 调用抓取程序.</p>
-      </div>
-    </form>
-
-    <footer>
-      <p>
-        REST API 为常见的浏览器操作提供端点，例如屏幕截图、提取 HTML 内容、生成 PDF 等。以下是可用选项：<br>
-        <ul>
-           
-          <li>/content - Fetch HTML</li>
-          <li>/screenshot - Capture screenshot</li>
-          <li>/pdf - Render PDF</li>
-          <li>/snapshot - Take a webpage snapshot</li>
-          <li>/scrape - Scrape HTML elements</li>
-          <li>/json - Capture structured data using AI</li>
-          <li>/links - Retrieve links from a webpage</li>
-          <li>/markdown - Extract Markdown from a webpage</li>
-        </ul>
-      </p>
-    </footer>
+    <!-- 显示截图 -->
+    <div v-if="screenshotSrc" class="preview">
+      <img :src="screenshotSrc" alt="screenshot" />
+    </div>
   </div>
 </template>
 
 <script>
 export default {
-  name: 'ContentGenPuppetron',
-
+  name: "ScreenshotViewer",
   data() {
     return {
-      url: '',
-      action: 'content',
-      protocol: 'http://',
-      currentObjectUrl: null,
-      // list of supported backend routes to display as buttons
-      actions: [
-        'content',
-        'snapshot',
-        'screenshot',
-        'pdf',
-        'scrape',
-        'json',
-        'links',
-        'markdown'
-      ],
-      // selectors textarea model for scrape
-      selectors: ''
+      // 默认可以填你常用的测试地址
+      targetUrl: "http://www.gogotrials.site/image/1.jpg",
+      loading: false,
+      error: null,
+      screenshotSrc: null, // object URL
+      lastBlob: null
     };
   },
   methods: {
-    encode(u) {
-      return encodeURIComponent(u);
+    // 构造完整 API URL（优先使用 VUE_APP_API_BASE）
+    buildApiUrl(path) {
+      const base = (process.env.VUE_APP_API_BASE || "").replace(/\/+$/, "");
+      if (base) {
+        // path 应以 / 开头，例如 '/api/screenshot?...'
+        return `${base}${path}`;
+      }
+      // 回退到相对路径（在同域并已由 Worker route 绑定时可用）
+      return path;
     },
 
-    setAction(act) {
-      // ensure we only set allowed actions used by backend
-      if (this.actions.includes(act)) {
-        this.action = act;
-      } else {
-        this.action = 'content';
+    // 主流程：fetch -> blob -> createObjectURL -> 展示
+    async onFetch() {
+      this.error = null;
+      this.loading = true;
+
+      // 清理旧的 object URL（如果有）
+      if (this.screenshotSrc) {
+        URL.revokeObjectURL(this.screenshotSrc);
+        this.screenshotSrc = null;
       }
-    },
-
-    labelFor(act) {
-      // Human-friendly labels (you can customize)
-      const map = {
-        content: 'Content',
-        snapshot: 'Snapshot',
-        screenshot: 'Screenshot',
-        pdf: 'PDF',
-        scrape: 'Scrape',
-        json: 'JSON',
-        links: 'Links',
-        markdown: 'Markdown'
-      };
-      return map[act] || act;
-    },
-
-    async onSubmit() {
-      if (!this.url || !(this.url.startsWith('http://') || this.url.startsWith('https://'))) {
-        alert('Please enter a valid URL including http:// or https://');
-        return;
-      }
-
-      const params = new URLSearchParams({ url: this.url });
-
-      // include viewport params only for endpoints that normally use them
-      if (this.action === 'screenshot' || this.action === 'snapshot') {
-        params.set('width', String(window.innerWidth));
-        params.set('height', String(window.innerHeight));
-      }
-
-      // scrape: if selectors provided, encode as elements JSON array per Cloudflare example
-      if (this.action === 'scrape') {
-        const lines = (this.selectors || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-        if (lines.length) {
-          const elements = lines.map(s => ({ selector: s }));
-          // JSON.stringify will be percent-encoded by URLSearchParams when setting as value
-          params.set('elements', JSON.stringify(elements));
-        }
-        // If selectors empty, we still include url param (server-side will accept url-only fallback)
-      }
-
-      const endpoint = `/${this.action}?${params.toString()}`;
+      this.lastBlob = null;
 
       try {
-        const resp = await fetch(endpoint, { method: 'GET' });
-
-        if (!resp.ok) {
-          const txt = await resp.text().catch(() => '');
-          throw new Error(`Server returned ${resp.status}: ${txt}`);
+        if (!this.targetUrl) {
+          throw new Error("请先填写目标 URL");
         }
 
-        const ct = (resp.headers.get('content-type') || '').toLowerCase();
+        // 构造请求路径（注意 encodeURIComponent）
+        const apiPath = `/api/screenshot?url=${encodeURIComponent(this.targetUrl)}`;
+        const url = this.buildApiUrl(apiPath);
 
-        if (ct.includes('image/')) {
-          const blob = await resp.blob();
-          this.applyPreviewFromBlob(blob, 'image');
-        } else if (ct.includes('application/pdf')) {
-          const blob = await resp.blob();
-          this.applyPreviewFromBlob(blob, 'pdf');
-        } else if (ct.includes('text/html') || ct.includes('application/json') || ct.includes('text/plain')) {
-          const text = await resp.text();
-          if (ct.includes('text/html')) {
-            this.showHtmlPreview(text);
-          } else if (ct.includes('application/json')) {
-            try {
-              const parsed = JSON.parse(text);
-              this.showHtmlPreview(`<pre>${this.escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`);
-            } catch {
-              this.showHtmlPreview(`<pre>${this.escapeHtml(text)}</pre>`);
-            }
-          } else {
-            this.showHtmlPreview(`<pre>${this.escapeHtml(text)}</pre>`);
-          }
-        } else {
-          // fallback: treat as binary and trigger a download
-          const blob = await resp.blob();
-          this.applyPreviewFromBlob(blob, 'binary');
+        // 发起请求（若需要带 cookie，请添加 credentials:'include'）
+        const res = await fetch(url, {
+          method: "GET",
+          // credentials: 'include' // 若需携带 cookie，取消注释
+        });
+
+        if (!res.ok) {
+          // 如果返回 HTML（错误页 / challenge），把前几百字符作为调试信息
+          const text = await res.text().catch(() => "");
+          const preview = text ? text.slice(0, 1000) : "<no body>";
+          throw new Error(`HTTP ${res.status} — ${preview}`);
         }
-      } catch (err) {
-        console.error(err);
-        alert('Request failed: ' + (err.message || err));
+
+        // 确认 Content-Type 是图片（可选）
+        const ct = res.headers.get("Content-Type") || "";
+        if (!ct.startsWith("image/")) {
+          // 仍然尝试把 body 解析为 text 以便调试
+          const txt = await res.text().catch(() => "<binary body>");
+          throw new Error(`响应不是图片 (Content-Type=${ct})，前几百字符：${txt.slice(0,400)}`);
+        }
+
+        // 得到二进制并创建 Object URL 显示
+        const blob = await res.blob();
+        this.lastBlob = blob;
+        this.screenshotSrc = URL.createObjectURL(blob);
+      } catch (e) {
+        // 捕获各种异常并展示友好信息
+        this.error = (e && e.message) ? e.message : String(e);
+        console.error("screenshot fetch error:", e);
+      } finally {
+        this.loading = false;
       }
     },
 
-    applyPreviewFromBlob(blob, kind) {
-      // Revoke previous object URL if present
-      if (this.currentObjectUrl) {
-        try { URL.revokeObjectURL(this.currentObjectUrl); } catch (e) { /* noop */ }
-        this.currentObjectUrl = null;
-      }
-
-      const objectUrl = URL.createObjectURL(blob);
-      this.currentObjectUrl = objectUrl;
-
-      // Use 'kind' to decide how to present the blob (prevents eslint no-unused-vars)
-      // - images and pdfs: open in a new tab
-      // - binary/other: trigger download with a suggested filename
-      if (kind === 'image' || kind === 'pdf' || kind === 'binary') {
-        // For PDFs and images, opening in a new tab provides quick preview
-        window.open(objectUrl, '_blank');
-        return;
-      }
-
-      // fallback: download
-      const ext = kind === 'pdf' ? 'pdf' : (kind === 'image' ? 'png' : 'bin');
-      const filename = this.suggestFilename(ext);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = filename;
-      // Append to DOM to make click work in some browsers
+    // 下载已获取的图片（利用同一个 blob）
+    download() {
+      if (!this.lastBlob) return;
+      const a = document.createElement("a");
+      const url = this.screenshotSrc;
+      a.href = url;
+      // 生成一个默认文件名，可按需改造
+      a.download = "screenshot.png";
       document.body.appendChild(a);
       a.click();
       a.remove();
-    },
-
-    showHtmlPreview(html) {
-      const w = window.open('', '_blank');
-      if (w) {
-        w.document.open();
-        w.document.write(html);
-        w.document.close();
-      } else {
-        alert('Preview blocked by browser. You can configure to allow popups for preview.');
-      }
-    },
-
-    onPaste(e) {
-      const text = e.clipboardData.getData('text') || '';
-      if (text.startsWith('http://') || text.startsWith('https://')) {
-        e.preventDefault();
-        this.url = text;
-      }
-    },
-
-    onFocus() {
-      if (this.url.trim() === '') {
-        this.url = this.protocol;
-      }
-    },
-
-    onBlur() {
-      if (this.url.trim() === this.protocol) {
-        this.url = '';
-      }
-    },
-
-    suggestFilename(ext) {
-      try {
-        const u = new URL(this.url);
-        const re = new RegExp('[\\\\/\\?=&:\\s]+', 'g');
-        const sanitize = (s) => s.replace(re, '_').replace(/^_+|_+$/g, '');
-        const hostPart = sanitize(u.hostname || 'site');
-        const pathPart = sanitize(u.pathname || '');
-        const name = pathPart ? `${hostPart}_${pathPart}` : hostPart;
-        return `capture_${name}.${ext}`;
-      } catch {
-        return `capture.${ext}`;
-      }
-    },
-
-    escapeHtml(s) {
-      return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
   },
-
   beforeDestroy() {
-    if (this.currentObjectUrl) {
-      try { URL.revokeObjectURL(this.currentObjectUrl); } catch (e) { /* noop */ }
+    // 组件销毁前释放 object URL，避免内存泄漏
+    if (this.screenshotSrc) {
+      URL.revokeObjectURL(this.screenshotSrc);
+      this.screenshotSrc = null;
     }
-  },
-  beforeUnmount() {
-    if (this.currentObjectUrl) {
-      try { URL.revokeObjectURL(this.currentObjectUrl); } catch (e) { /* noop */ }
-    }
+    this.lastBlob = null;
   }
 };
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css?family=Signika:400,700');
-
-.puppetron {
-  margin: auto;
-  width: 100%;
-  padding: 0 0.5em;
+.screenshot-viewer {
+  max-width: 900px;
+  margin: 18px auto;
   text-align: center;
 }
-.puppetron,
-.puppetron * {
-  font-family: 'Signika', sans-serif;
-  font-weight: 400;
-  color: #00667A;
-  text-align: center;
-}
-h1 {
-  font-weight: 700;
-  font-size: 60px;
-  text-shadow: 0 1px 20px #60E8EE;
-  margin: 0 0 0.25em;
-}
-
-/* URL input */
-input[type='url'] {
-  display: inline-block;
-  width: 90%;
-  max-width: 600px;
-  padding: 0.45em;
-  margin: 0.5em;
-  border: 0;
-  background-color: #D7FCFD;
-}
-input[type='url']:focus {
-  outline: 3px solid #00667A;
-}
-
-/* Actions grid */
-.actions-grid {
+.controls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  gap: 8px;
   justify-content: center;
-  margin-top: 1rem;
-}
-.actions-grid button {
-  border-radius: 0;
-  border: 0;
-  padding: 0.8em 1.5em;
-  min-width: 160px;
-  color: rgba(255, 255, 255, 0.95);
-  background-color: #0e6069;
-  box-shadow: 0 1px 10px #60E8EE;
-  cursor: pointer;
-  font-size: 18px;
-}
-.actions-grid button.active {
-  outline: 3px solid #60E8EE;
-  box-shadow: 0 1px 25px #60E8EE;
-}
-.actions-grid button:hover {
-  transform: translateY(-2px);
-}
-
-/* Scrape controls */
-.scrape-controls {
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
   align-items: center;
+  margin-bottom: 12px;
 }
-.scrape-controls textarea {
-  width: 90%;
-  max-width: 800px;
-  min-height: 96px;
-  padding: 0.6rem;
-  font-size: 14px;
+.url-input {
+  width: 56%;
+  padding: 8px;
+  border: 1px solid #cfcfcf;
+  border-radius: 4px;
 }
-.scrape-controls .hint {
-  font-size: 12px;
-  color: #666;
-  margin-top: 0.5rem;
+button {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: #0d7a7a;
+  color: white;
+  border: none;
+  cursor: pointer;
 }
-/* ====== 新增：让页面内的列表左对齐，同时保留列表块居中（首选） ====== */
-/* 使 .puppetron 下的 ul/ol 项目内部左对齐，但把整个列表块居中显示 */
-.puppetron ul,
-.puppetron ol {
-  text-align: left;           /* 列表项内部左对齐 */
-  display: inline-block;      /* 让整个列表块可以被居中（由于容器是 centered） */
-  margin: 0.5rem auto;        /* 列表块垂直间距并水平居中 */
-  padding-left: 1.35rem;      /* 为 bullets/markers 留出左侧间距 */
-  list-style-position: outside;
-  max-width: 900px;           /* 可选：限制列表宽度，视页面布局调整 */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
-
-/* 确保每个 li 内容左对齐 */
-.puppetron ul li,
-.puppetron ol li {
+.status {
+  margin-bottom: 8px;
+  color: #555;
+}
+.error {
+  color: #b00020;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
   text-align: left;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
 }
-
-/* 如果列表在 <p> 内，给出合理的间距 */
-.puppetron p ul,
-.puppetron p ol {
-  margin-top: 0.5rem;
-}
-
-/* ====== 备选：如果你希望列表整体左靠页面（取消列表块居中），可使用下面代码（注释掉上面 inline-block 的版本） ======
-.puppetron ul,
-.puppetron ol {
-  text-align: left;
-  display: block;
-  margin: 0.5rem 0;
-  padding-left: 1.35rem;
-}
-*/
-
-/* Footer */
-footer {
-  font-size: 16px;
-  margin-top: 1.5rem;
+.preview img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #eee;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
 }
 </style>
