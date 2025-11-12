@@ -3,58 +3,55 @@
     <h1>Make Your Browser Talk</h1>
 
     <!-- Friendly status / errors (aria-live) -->
-    <div aria-live="polite" v-if="lastError" class="status" style="color:#b00020; margin-bottom:0.6rem;">
+    <div aria-live="polite" v-if="lastError" class="status-message error">
       {{ lastError }}
     </div>
 
     <form id="formtron" @submit.prevent="onSubmit" class="talk-form">
       <div class="mode-row">
-        <label><input type="radio" v-model="mode" value="text" /> Text</label>
-        <label><input type="radio" v-model="mode" value="selector" /> URL + Selector</label>
+        <label class="mode-label"><input type="radio" v-model="mode" value="text" /> Text</label>
+        <label class="mode-label"><input type="radio" v-model="mode" value="selector" /> URL + Selector</label>
       </div>
 
       <!-- Text mode -->
-      <div v-if="mode === 'text'">
+      <div v-if="mode === 'text'" class="card card-body">
         <label class="label">Enter text for the browser to speak</label>
         <textarea
           v-model="text"
           placeholder="Type something for the browser to say..."
           rows="6"
           @input="onTextInput"
+          class="text-input"
         ></textarea>
-        <!-- display current length / max -->
-        <div style="width:90%; max-width:900px; text-align:left; font-size:12px; color:#666;">
-          {{ text.length }} / {{ MAX_CHARS }} chars
-        </div>
+        <div class="hint muted">{{ text.length }} / {{ MAX_CHARS }} chars</div>
       </div>
 
       <!-- Selector mode -->
-      <div v-else class="selector-mode">
+      <div v-else class="card card-body selector-mode">
         <label class="label">Target URL</label>
-        <input type="url" v-model="url" placeholder="https://example.com" />
+        <input type="url" v-model="url" placeholder="https://example.com" class="text-input" />
         <label class="label" style="margin-top:0.5rem">CSS selector to extract (single)</label>
-        <input type="text" v-model="selector" placeholder="e.g. h1, .article .title" />
+        <input type="text" v-model="selector" placeholder="e.g. h1, .article .title" class="text-input" />
         <p class="hint">Worker will call BR scrape with this selector and turn the extracted text into speech.</p>
 
-        <!-- Show extracted text preview (if backend returned it) -->
-        <div v-if="extractedText || rawBrJson" class="extracted-preview card card-body" style="margin-top:0.6rem; text-align:left;">
+        <div v-if="extractedText || rawBrJson" class="extracted-preview card card-body preview-box">
           <strong>Extracted text (preview):</strong>
-          <p v-if="extractedText">{{ extractedText }}</p>
-          <p v-else style="color:#666;font-style:italic;">(no text extracted)</p>
+          <p v-if="extractedText" class="extracted-text">{{ extractedText }}</p>
+          <p v-else class="muted">(no text extracted)</p>
 
-          <div style="margin-top:0.4rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <button type="button" @click="useExtractedText" :disabled="!extractedText">Use as text</button>
-            <button type="button" @click="showRawBrJson = !showRawBrJson" :disabled="!rawBrJson">
+          <div class="preview-actions">
+            <button type="button" @click="useExtractedText" :disabled="!extractedText" class="btn small">Use as text</button>
+            <button type="button" @click="showRawBrJson = !showRawBrJson" :disabled="!rawBrJson" class="btn small muted-btn">
               {{ showRawBrJson ? 'Hide raw BR JSON' : 'Show raw BR JSON' }}
             </button>
-            <button type="button" @click="copyRawBrJson" :disabled="!rawBrJson">Copy raw JSON</button>
-            <button type="button" @click="downloadRawBrJson" :disabled="!rawBrJson">Download JSON</button>
+            <button type="button" @click="copyRawBrJson" :disabled="!rawBrJson" class="btn small">Copy raw JSON</button>
+            <button type="button" @click="downloadRawBrJson" :disabled="!rawBrJson" class="btn small">Download JSON</button>
           </div>
 
-          <div v-if="showRawBrJson" class="raw-json-wrapper" aria-hidden="false">
+          <div v-if="showRawBrJson" class="raw-json-wrapper">
             <div class="raw-json-toolbar">
               <span class="badge">Raw BR JSON</span>
-              <small class="muted"> — debug view (collapsed by default)</small>
+              <small class="muted"> — debug view</small>
             </div>
             <pre class="raw-json-pre" v-text="rawBrJsonPreview"></pre>
           </div>
@@ -67,16 +64,17 @@
             type="button"
             @click="requestTts"
             :disabled="!canRequest || isLoading"
+            class="btn primary"
             aria-label="Generate and play audio"
           >
             {{ isLoading ? 'Generating...' : 'Generate & Play' }}
           </button>
 
-          <button type="button" @click="pauseAudio" :disabled="!isPlaying || isPaused" aria-label="Pause">⏸ Pause</button>
-          <button type="button" @click="resumeAudio" :disabled="!isPaused" aria-label="Resume">▶ Resume</button>
-          <button type="button" @click="stopAudio" :disabled="!isPlaying && !isPaused" aria-label="Stop">■ Stop</button>
+          <button type="button" @click="pauseAudio" :disabled="!isPlaying || isPaused" class="btn">⏸ Pause</button>
+          <button type="button" @click="resumeAudio" :disabled="!isPaused" class="btn">▶ Resume</button>
+          <button type="button" @click="stopAudio" :disabled="!isPlaying && !isPaused" class="btn">■ Stop</button>
 
-          <button type="button" @click="downloadAudio" :disabled="!audioUrl" aria-label="Download audio">⬇ Download</button>
+          <button type="button" @click="downloadAudio" :disabled="!audioUrl" class="btn">⬇ Download</button>
         </div>
       </div>
 
@@ -91,8 +89,6 @@
           </span>
         </div>
       </div>
-
-      <!-- Accordion card omitted for brevity - unchanged -->
     </form>
 
     <footer>
@@ -469,5 +465,202 @@ export default {
 </script>
 
 <style scoped>
-/* 省略样式：保持与你现有样式一致（你已有完整样式，可保留） */
+@import url('https://fonts.googleapis.com/css?family=Signika:400,700');
+
+.puppetron {
+  margin: auto;
+  width: 100%;
+  padding: 0 0.5em;
+  text-align: center;
+}
+.puppetron,
+.puppetron * {
+  font-family: 'Signika', sans-serif;
+  font-weight: 400;
+  color: #00667A;
+  text-align: center;
+}
+h1 {
+  font-weight: 700;
+  font-size: 48px;
+  text-shadow: 0 1px 12px #60E8EE;
+  margin: 0 0 0.5rem;
+}
+
+/* card */
+.card {
+  background: #fbffff;
+  border: 1px solid #e6f7f7;
+  padding: 12px;
+  margin: 0.8rem auto;
+  max-width: 900px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  text-align: left;
+  border-radius: 6px;
+}
+
+/* inputs */
+.text-input, textarea {
+  width: 100%;
+  padding: 0.6rem;
+  border: 0;
+  background: #D7FCFD;
+  font-size: 16px;
+  color: #063a3b;
+  box-shadow: 0 1px 10px rgba(96,232,238,0.06);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* mode row */
+.mode-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 0.6rem;
+}
+.mode-label {
+  font-weight: 600;
+  color: #064b52;
+}
+
+/* controls */
+.controls-row {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+  margin-top: 0.6rem;
+}
+.action-buttons {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.btn {
+  background: #0e6069;
+  color: #fff;
+  border: none;
+  padding: 0.6rem 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 120px;
+  box-shadow: 0 1px 10px #60E8EE;
+}
+.btn.small { min-width: 110px; padding: 0.45rem 0.7rem; font-size: 14px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primary { background: #0b5960; }
+
+/* muted button style (secondary) */
+.muted-btn {
+  background: #e6fbfb;
+  color: #064b52;
+  box-shadow: none;
+}
+
+/* visualizer */
+.visual-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 1rem;
+  width: 90%;
+  max-width: 900px;
+}
+.visualizer {
+  display: flex;
+  gap: 4px;
+  align-items: end;
+  height: 48px;
+  margin-bottom: 0.6rem;
+  transition: opacity 0.2s ease;
+  opacity: 0.25;
+}
+.visualizer.playing { opacity: 1; }
+.visualizer .bar {
+  width: 6px;
+  background: linear-gradient(180deg, #60E8EE, #0b5960);
+  border-radius: 2px;
+  transform-origin: bottom center;
+  animation-name: pulse;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-duration: 700ms;
+}
+@keyframes pulse {
+  0% { transform: scaleY(0.2); opacity: 0.6; }
+  50% { transform: scaleY(1.4); opacity: 1; }
+  100% { transform: scaleY(0.2); opacity: 0.6; }
+}
+
+/* spoken preview */
+.spoken-preview {
+  width: 100%;
+  max-width: 900px;
+  padding: 0.6rem;
+  background: rgba(6, 75, 82, 0.04);
+  color: #063a3b;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 16px;
+  line-height: 1.5;
+  margin-top: 0.6rem;
+  overflow-wrap: break-word;
+}
+.spoken-preview span.highlight {
+  background: linear-gradient(90deg, rgba(96,232,238,0.25), rgba(6,75,82,0.08));
+  box-shadow: 0 1px 6px rgba(96,232,238,0.08);
+  border-radius: 3px;
+  padding: 0.05rem 0.18rem;
+}
+
+/* preview box for selector mode */
+.preview-box { margin-top: 0.6rem; }
+.preview-actions { margin-top: 0.5rem; display:flex; gap:0.5rem; flex-wrap:wrap; }
+
+/* raw JSON viewer */
+.raw-json-wrapper {
+  margin-top: 0.6rem;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #fafefd, #f0fcfc);
+  padding: 0.4rem;
+  box-shadow: 0 1px 6px rgba(6,75,82,0.04);
+}
+.raw-json-pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace;
+  font-size: 13px;
+  color: #013033;
+  background: #f6f9f9;
+  border: 1px solid rgba(6,75,82,0.06);
+  border-radius: 6px;
+  padding: 0.6rem;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.badge {
+  background: #e6fbfb;
+  color: #0b5960;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* status / errors */
+.status-message { margin: 12px auto; max-width: 900px; text-align: center; }
+.status-message.error { color: #b00020; }
+
+/* card text and hints */
+.label { font-weight: 600; margin-bottom: 0.4rem; color:#064b52; display:block; }
+.hint { font-size: 12px; color: #666; margin-top: 0.3rem; }
+
+/* responsive */
+@media (max-width: 720px) {
+  .action-buttons { flex-direction: column; align-items: stretch; }
+  .btn { min-width: auto; width: 100%; }
+  .raw-json-pre { font-size: 12px; }
+}
 </style>
