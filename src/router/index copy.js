@@ -6,11 +6,19 @@ import BrGuides from '@/components/BrGuides.vue'
 import MakeBrowserTalk from '@/components/MakeBrowserTalk.vue'
 import ContentGen from '@/components/ContentGen.vue'
 import BrWithAI from '@/components/BrWithAI.vue'
-// import RestAPIExample from '@/components/RestAPIExample.vue'
-// import SeoAnalytic from '@/components/SeoAnalytic.vue'
 import BrIntroduction from '@/components/BrIntroduction.vue'
 
 Vue.use(Router)
+
+// 简单的 NotFound 组件（避免通配符直接 redirect 回根）
+const NotFound = {
+  name: 'NotFound',
+  template: `
+    <div style="padding:40px;text-align:center;">
+      <h2>页面未找到 (404)</h2>
+      <p>请检查链接或返回 <router-link to="/br-guides">首页</router-link></p>
+    </div>`
+}
 
 const routes = [
   { path: '/', redirect: '/br-guides' },
@@ -22,11 +30,15 @@ const routes = [
   // { path: '/rest-apiexample', name: 'RestAPIExample', component: RestAPIExample },
   // { path: '/seo-analytic', name: 'SeoAnalytic', component: SeoAnalytic },
 
-  // fallback
-  { path: '*', redirect: '/' }
+  // fallback: 显示 404，而不是自动重定向到根（更利于调试）
+  { path: '*', component: NotFound }
 ]
 
-export default new Router({
-  mode: 'hash', // 开发用 hash 模式最方便；若想用 history 请改为 'history' 并配置后端回退
+const router = new Router({
+  mode: 'hash',
   routes
 })
+
+
+
+export default router

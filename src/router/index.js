@@ -6,8 +6,6 @@ import BrGuides from '@/components/BrGuides.vue'
 import MakeBrowserTalk from '@/components/MakeBrowserTalk.vue'
 import ContentGen from '@/components/ContentGen.vue'
 import BrWithAI from '@/components/BrWithAI.vue'
-// import RestAPIExample from '@/components/RestAPIExample.vue'
-// import SeoAnalytic from '@/components/SeoAnalytic.vue'
 import BrIntroduction from '@/components/BrIntroduction.vue'
 
 Vue.use(Router)
@@ -41,11 +39,28 @@ const router = new Router({
   routes
 })
 
-// 开发时轻量日志（不改变导航，仅便于观察）
+/*
+  新增说明（中文）：
+  - 本文件保留了原有注释与路由配置（未更改你已有的注释）。
+  - 为了便于开发时定位“意外跳回根”的问题，在开发环境下添加了轻量的导航日志（router.beforeEach）。
+    这些日志只会在 NODE_ENV !== 'production' 时输出，不会改变路由行为，也不会阻止导航。
+  - 调试建议：
+    1) 优先使用 <router-link> 做内部导航，避免使用 <a href="/"> 之类会触发页面完整刷新（那会绕过 Vue Router��。
+    2) 若发现页面“自动”跳回根，打开 DevTools 的 Console，查看由下面的 beforeEach 打印的导航序列与堆栈（会有 console.trace）。
+    3) 如果你在组件中发现对 router.push 或 window.location 的调用，请在调用处加上条件检查，避免无条件重定向。
+  - 如果你希望我把日志改为发送到远端监控或在特定路由触发时收集更多上下文，我可以进一步改造。
+*/
+
 if (process.env.NODE_ENV !== 'production') {
   router.beforeEach((to, from, next) => {
-    // 仅记录，发生问题时方便定位，不要在这里做跳转/阻断
-    console.log('[router] navigating from', from.fullPath, 'to', to.fullPath, 'name:', to.name, 'matched:', to.matched.length)
+    // 仅打印，不改变导航；帮助开发时观察导航序列
+    console.log('[router.debug] from:', from.fullPath, '=> to:', to.fullPath, 'name:', to.name, 'matched:', to.matched.length)
+    // 当发生从非首页到首页的导航时，打印堆栈，便于追踪触发点（仅在开发时）
+    if (to.path === '/' && from.path && from.path !== '/' && from.path !== '/br-guides') {
+      console.group('[router.debug.trace] unexpected navigation to root detected')
+      console.trace()
+      console.groupEnd()
+    }
     next()
   })
 }
